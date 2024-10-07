@@ -1,0 +1,69 @@
+name: Xcode - Build and Analyze
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: Build and Analyze Default Scheme Using xcodebuild
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set Default Scheme
+        id: set-scheme
+        run: |
+          echo "Fetching project scheme..."
+          scheme_list=$(xcodebuild -list -json | tr -d "\n")
+          default_scheme=$(echo "$scheme_list" | ruby -e "require 'json'; puts JSON.parse(STDIN.gets)['project']['targets'][0]")
+          echo "Default scheme detected: $default_scheme"
+          echo "::set-output name=default_scheme::$default_scheme"
+
+      - name: Build and Analyze
+        env:
+          SCHEME: ${{ steps.set-scheme.outputs.default_scheme }}
+        run: |
+          echo "Determining project type..."
+          if [ -n "$(ls -A | grep -i \.xcworkspace$)" ]; then
+            filetype_parameter="workspace"
+            file_to_build=$(ls -A | grep -i \.xcworkspace$)
+          else
+            filetype_parameter="project"
+            file_to_build=$(ls -A | grep -i \.xcodeproj$)
+          fi
+
+          file_to_build=$(echo "$file_to_build" | awk '{$1=$1;print}')
+          echo "Building with $filetype_parameter: $file_to_build"
+
+          # Run xcodebuild with clean, build, and analyze actions
+          xcodebuild clean build analyze -scheme "$SCHEME" -"$filetype_parameter" "$file_to_build" | xcpretty
+          exit_status=${PIPESTATUS[0]}
+
+          if [ $exit_status -ne 0 ]; then
+            echo "Build failed with exit status $exit_status"
+            exit $exit_status
+          fi
+
+      - name: Run Tests
+        run: |
+          echo "Running tests..."
+          xcodebuild test -scheme "$SCHEME" -"$filetype_parameter" "$file_to_build" | xcpretty
+          exit_status=${PIPESTATUS[0]}
+
+          if [ $exit_status -ne 0 ]; then
+            echo "Tests failed with exit status $exit_status"
+            exit $exit_status
+          fi
+
+      - name: Upload Artifacts
+        if: success()  # Only run this step if previous steps succeeded
+        uses: actions/upload-artifact@v3
+        with:
+          name: Xcode Build Artifacts
+          path: |
+            build/Release-iphoneos/  # Adjust according to your build output path
