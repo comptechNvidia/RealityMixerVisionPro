@@ -1,0 +1,49 @@
+# This workflow will build a Swift project and run tests.
+# For more information, see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-swift
+
+name: Swift CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Swift
+        run: |
+          echo "Setting up Swift environment..."
+          # Optionally specify the Swift version if needed
+          swift --version || echo "Swift is not installed or not found."
+
+      - name: Build the project
+        run: |
+          echo "Building the project..."
+          swift build -v
+          echo "Build completed successfully!"
+
+      - name: Run tests
+        run: |
+          echo "Running tests..."
+          swift test -v
+          echo "Tests completed!"
+
+      - name: Upload test results
+        if: success()  # Only run this step if previous steps succeeded
+        run: |
+          echo "Uploading test results..."
+          # Use Xcode's 'xcodebuild' to convert results to JUnit XML if needed
+          # xcodebuild -resultBundlePath build/reports
+
+      - name: Notify completion
+        if: success()  # Notify if the build was successful
+        run: |
+          echo "Build and test workflow completed successfully!"
